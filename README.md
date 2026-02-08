@@ -35,7 +35,7 @@ size -t massive_directory/
 size -h
 ```
 
-## lis full contents of directories by size:
+## list full contents of directories by size:
 
 ** size --list feature examples:**
 
