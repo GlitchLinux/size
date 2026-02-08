@@ -18,21 +18,21 @@ sudo chmod +x /usr/local/bin/size
 
 ```bash
 # Basic usage
-SIZE file.txt
-SIZE /folder/
+size file.txt
+size /folder/
 
 # Recursive directory size
-SIZE -r /etc/
-SIZE --recursive /home/user/
+size -r /etc/
+size --recursive /home/user/
 
 # Specific units
-SIZE -k /path/to/file.txt
-SIZE -m /path/to/folder/
-SIZE -g large_file.iso
-SIZE -t massive_directory/
+size -k /path/to/file.txt
+size -m /path/to/folder/
+size -g large_file.iso
+size -t massive_directory/
 
 # Help
-SIZE -h
+size -h
 ```
 
 ## Also list full contents of directories by size:
@@ -74,7 +74,6 @@ $ size --list -r /var/log/
 Created list of 142 files
 Total size: 184MB
 List saved to: /tmp/size_list_var_log_recursive_20240115_143022.txt
-
 Show list? [Y/n]: Y
 
 ====================================
@@ -85,8 +84,8 @@ Top 20 largest files in '/var/log/':
   3.       12.4MB  .../kern.log.1
   4.        8.2MB  .../syslog
   5.        5.6MB  .../auth.log
-... (15 more lines)
 
+... (15 more lines)
 ... and 122 more files in the complete list
 
 Full list available at: /tmp/size_list_var_log_recursive_20240115_143022.txt
