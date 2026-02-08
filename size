@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""
+SIZE - File and Folder Size Display Utility
+Usage:
+  SIZE [options] <path>
+  
+Options:
+  -r, --recursive    Show recursive size for directories
+  -k, --kilobytes    Display size in kilobytes
+  -m, --megabytes    Display size in megabytes
+  -g, --gigabytes    Display size in gigabytes
+  -t, --terabytes    Display size in terabytes
+  --list             Create list of files sorted by size in /tmp/
+  -h, --help         Show this help message
+"""
+
+import os
+import sys
+import argparse
+from pathlib import Path
+import tempfile
+from datetime import datetime
+
+def get_human_readable_size(size_bytes, unit=None):
+    """Convert bytes to human readable format"""
+    if unit:
+        unit = unit.lower()
+        if unit == 'k':
+            return f"{size_bytes / 1024:.2f}KB"
+        elif unit == 'm':
+            return f"{size_bytes / (1024 ** 2):.2f}MB"
+        elif unit == 'g':
+            return f"{size_bytes / (1024 ** 3):.2f}GB"
+        elif unit == 't':
+            return f"{size_bytes / (1024 ** 4):.2f}TB"
+    
+    # Auto-select appropriate unit
+    for unit, divisor in [('TB', 1024**4), ('GB', 1024**3), 
+                          ('MB', 1024**2), ('KB', 1024)]:
+        if size_bytes >= divisor:
+            if divisor >= 1024**3:  # GB or TB
+                return f"{size_bytes / divisor:.1f}{unit}"
+            else:
+                return f"{int(size_bytes / divisor)}{unit}"
+    return f"{size_bytes}B"
+
+def get_file_size(path, recursive=False):
+    """Get size of file or directory"""
+    path = Path(path)
+    
+    if not path.exists():
+        print(f"Error: '{path}' does not exist", file=sys.stderr)
+        sys.exit(1)
+    
+    if path.is_file():
+        return path.stat().st_size
+    
+    # Directory size
+    total_size = 0
+    if recursive:
+        for dirpath, dirnames, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                try:
+                    total_size += os.path.getsize(fp)
+                except (OSError, PermissionError):
+                    continue
+    else:
+        for entry in path.iterdir():
+            try:
+                if entry.is_file():
+                    total_size += entry.stat().st_size
+                elif entry.is_dir():
+                    # Skip directories in non-recursive mode
+                    pass
+            except (OSError, PermissionError):
+                continue
+    
+    return total_size
+
+def get_file_list(path, recursive=False):
+    """Get list of files with sizes"""
+    path = Path(path)
+    file_list = []
+    
+    if path.is_file():
+        try:
+            file_list.append((str(path), path.stat().st_size))
+        except (OSError, PermissionError):
+            pass
+    else:
+        if recursive:
+            for dirpath, dirnames, filenames in os.walk(path):
+                for f in filenames:
+                    fp = Path(dirpath) / f
+                    try:
+                        file_list.append((str(fp), fp.stat().st_size))
+                    except (OSError, PermissionError):
+                        continue
+        else:
+            for entry in path.iterdir():
+                try:
+                    if entry.is_file():
+                        file_list.append((str(entry), entry.stat().st_size))
+                except (OSError, PermissionError):
+                    continue
+    
+    # Sort by size (largest first)
+    file_list.sort(key=lambda x: x[1], reverse=True)
+    return file_list
+
+def create_size_list(path, recursive=False, unit=None):
+    """Create and display a sorted list of files by size"""
+    path = Path(path)
+    
+    if not path.exists():
+        print(f"Error: '{path}' does not exist", file=sys.stderr)
+        sys.exit(1)
+    
+    # Get file list
+    file_list = get_file_list(path, recursive)
+    
+    if not file_list:
+        print(f"No files found in '{path}'", file=sys.stderr)
+        return
+    
+    # Create temporary file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = str(path).replace('/', '_').replace(' ', '_').strip('_')
+    if len(safe_name) > 50:
+        safe_name = safe_name[:50]
+    
+    if recursive:
+        list_name = f"size_list_{safe_name}_recursive_{timestamp}.txt"
+    else:
+        list_name = f"size_list_{safe_name}_{timestamp}.txt"
+    
+    list_path = Path(tempfile.gettempdir()) / list_name
+    
+    # Write to file
+    with open(list_path, 'w', encoding='utf-8') as f:
+        f.write(f"File size list for: {path}\n")
+        f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Recursive: {recursive}\n")
+        f.write(f"Total files: {len(file_list)}\n")
+        f.write("=" * 80 + "\n\n")
+        
+        for i, (filepath, size_bytes) in enumerate(file_list, 1):
+            size_str = get_human_readable_size(size_bytes, unit)
+            rel_path = filepath
+            if not Path(filepath).is_absolute():
+                rel_path = str(Path(path) / filepath)
+            f.write(f"{i:4d}. {size_str:>12}  {rel_path}\n")
+    
+    # Calculate totals
+    total_size = sum(size for _, size in file_list)
+    total_size_str = get_human_readable_size(total_size, unit)
+    
+    print(f"\nCreated list of {len(file_list)} files")
+    print(f"Total size: {total_size_str}")
+    print(f"List saved to: {list_path}")
+    
+    # Prompt to show list
+    try:
+        response = input("\nShow list? [Y/n]: ").strip().lower()
+        if response in ('', 'y', 'yes'):
+            print("\n" + "=" * 80)
+            print(f"Top 20 largest files in '{path}':")
+            print("=" * 80)
+            
+            # Show top 20 entries
+            for i, (filepath, size_bytes) in enumerate(file_list[:20], 1):
+                size_str = get_human_readable_size(size_bytes, unit)
+                # Truncate long paths for display
+                display_path = filepath
+                if len(display_path) > 70:
+                    display_path = "..." + display_path[-67:]
+                print(f"{i:3d}. {size_str:>12}  {display_path}")
+            
+            if len(file_list) > 20:
+                print(f"\n... and {len(file_list) - 20} more files in the complete list")
+            
+            print("\nFull list available at:", list_path)
+        else:
+            print(f"\nList saved to: {list_path}")
+            print(f"To view: cat {list_path} | less")
+    except (KeyboardInterrupt, EOFError):
+        print(f"\nList saved to: {list_path}")
+        print("(Prompt cancelled)")
+
+def parse_arguments():
+    """Parse command line arguments manually to avoid conflicts"""
+    args = sys.argv[1:]
+    parsed = {
+        'path': None,
+        'recursive': False,
+        'kilobytes': False,
+        'megabytes': False,
+        'gigabytes': False,
+        'terabytes': False,
+        'list': False,
+        'help': False
+    }
+    
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        
+        if arg in ['-h', '--help']:
+            parsed['help'] = True
+        elif arg in ['-r', '--recursive']:
+            parsed['recursive'] = True
+        elif arg in ['-k', '--kilobytes']:
+            parsed['kilobytes'] = True
+        elif arg in ['-m', '--megabytes']:
+            parsed['megabytes'] = True
+        elif arg in ['-g', '--gigabytes']:
+            parsed['gigabytes'] = True
+        elif arg in ['-t', '--terabytes']:
+            parsed['terabytes'] = True
+        elif arg == '--list':
+            parsed['list'] = True
+        elif arg.startswith('-'):
+            # Unknown flag
+            print(f"Error: Unrecognized option '{arg}'", file=sys.stderr)
+            print(__doc__, file=sys.stderr)
+            sys.exit(1)
+        else:
+            # This should be the path
+            if parsed['path'] is None:
+                parsed['path'] = arg
+            else:
+                print(f"Error: Too many arguments: '{arg}'", file=sys.stderr)
+                sys.exit(1)
+        i += 1
+    
+    return parsed
+
+def main():
+    # Parse arguments
+    args = parse_arguments()
+    
+    # Show help if requested or no path provided
+    if args['help'] or not args['path']:
+        print(__doc__)
+        sys.exit(0)
+    
+    # Determine which unit to use
+    unit = None
+    if args['kilobytes']:
+        unit = 'k'
+    elif args['megabytes']:
+        unit = 'm'
+    elif args['gigabytes']:
+        unit = 'g'
+    elif args['terabytes']:
+        unit = 't'
+    
+    # Handle list mode
+    if args['list']:
+        create_size_list(args['path'], args['recursive'], unit)
+        sys.exit(0)
+    
+    # Normal size display mode
+    try:
+        size_bytes = get_file_size(args['path'], args['recursive'])
+        readable_size = get_human_readable_size(size_bytes, unit)
+        
+        # Display the result
+        path_str = str(args['path'])
+        if not path_str.endswith('/') and Path(args['path']).is_dir():
+            path_str += '/'
+        
+        if args['recursive']:
+            print(f"recursive size of: {path_str}")
+        else:
+            print(f"Size of: {path_str}")
+        
+        print(readable_size)
+        
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
