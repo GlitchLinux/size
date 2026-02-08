@@ -35,9 +35,9 @@ size -t massive_directory/
 size -h
 ```
 
-## Also list full contents of directories by size:
+## lis full contents of directories by size:
 
-**'--list` feature examples:**
+** size --list feature examples:**
 
 ```bash
 # Create list of files in directory sorted by size
